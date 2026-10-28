@@ -6,6 +6,7 @@ import 'core/network/api_client.dart';
 import 'data/data_sources/auth_demo_data_source.dart';
 
 import 'data/repositories/auth_repository_impl.dart';
+import 'di/injection.dart';
 import 'domain/usecase/login_usecase.dart';
 import 'features/auth/presentation/bloc/login_bloc.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
@@ -15,7 +16,7 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Create your API client using its actual constructor.
-  final apiClient = ApiClient(baseUrl: '');
+  final apiClient = ApiClient(baseUrl: 'https://jwallet-api.onrender.com');
 
   final remoteDataSource = AuthRemoteDataSourceImpl(apiClient);
 
@@ -38,9 +39,18 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: const LoginScreen(),
+      initialRoute: '/',
       routes: {
-       /* '/dashboard': (_) => const DashboardScreen(),*/
+        '/': (context) => LoginScreen(),
+        '/wallet': (context) {
+          final accessToken =
+          ModalRoute.of(context)!.settings.arguments as String;
+
+          return WalletScreen(
+            walletRepository: walletRepository,
+            accessToken: accessToken,
+          );
+        },
       },
     );
   }
