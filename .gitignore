@@ -1,0 +1,22 @@
+# Flutter
+.dart_tool/
+.packages
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies/
+
+# Android
+android/local.properties
+
+# Node.js
+node_modules/
+jwallet-backend/node_modules/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
