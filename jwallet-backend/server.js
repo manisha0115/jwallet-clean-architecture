@@ -270,7 +270,6 @@ app.post('/api/v1/transactions/transfer', checkAuth, (req, res) => {
   return res.status(200).json(responseBody);
 });
 
-
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`JWallet API running on port ${PORT}`);
