@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/storage/secure_storage_service.dart';
 import '../../../../di/injection.dart';
 import '../../../../domain/repositories/wallet_repository.dart';
 import '../../../../domain/usecase/money_transfer_usecase.dart';
@@ -67,6 +68,7 @@ class _WalletView extends StatelessWidget {
         Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+
       appBar: AppBar(
         title: const Text(
           'My Wallet',
@@ -76,7 +78,119 @@ class _WalletView extends StatelessWidget {
         backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
         elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'Logout',
+            icon: const Icon(Icons.logout),
+
+            onPressed: () {
+              showModalBottomSheet<void>(
+                context: context,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
+                ),
+                builder: (bottomSheetContext) {
+                  return SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.logout_rounded,
+                            size: 42,
+                            color: Colors.redAccent,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Are you sure you want to logout?',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'You will need to login again to access your wallet.',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () {
+                                    Navigator.pop(bottomSheetContext);
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                    foregroundColor: Theme.of(context).colorScheme.onSurface,
+                                    elevation: 0,
+                                    minimumSize: const Size.fromHeight(48),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: const Text('Cancel'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () async {
+                                    Navigator.pop(bottomSheetContext);
+
+                                    try {
+                                      await SecureStorageService().deleteToken();
+
+                                      if (!context.mounted) return;
+
+                                      Navigator.pushNamedAndRemoveUntil(
+                                        context,
+                                        '/login',
+                                            (route) => false,
+                                      );
+                                    } catch (e) {
+                                      if (!context.mounted) return;
+
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Logout failed. Please try again.'),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                    foregroundColor: Theme.of(context).colorScheme.onSurface,
+                                    elevation: 0,
+                                    minimumSize: const Size.fromHeight(48),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: const Text('Logout'),
+                                ),
+                              ),
+                            ],
+                          )
+
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+
+          ),
+        ],
       ),
+
       body: BlocBuilder<WalletBloc, WalletState>(
         builder: (context, state) {
           if (state is WalletLoading) {

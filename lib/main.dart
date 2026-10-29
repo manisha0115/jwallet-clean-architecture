@@ -1,9 +1,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:jwallet_clean_architecture/splash_screen.dart';
 
 import 'app/theme/app_theme.dart';
 import 'core/network/api_client.dart';
+import 'core/storage/auth_check_screen.dart';
+import 'core/storage/secure_storage_service.dart';
 import 'data/data_sources/auth_demo_data_source.dart';
 
 import 'data/repositories/auth_repository_impl.dart';
@@ -27,7 +30,10 @@ void main() {
 
   runApp(
     BlocProvider<LoginBloc>(
-      create: (_) => LoginBloc(loginUser),
+      create: (_) => LoginBloc(
+        loginUser,
+        SecureStorageService(),
+      ),
       child: const MyApp(),
     ),
   );
@@ -37,24 +43,25 @@ class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
+  @override
   Widget build(BuildContext context) {
-
     return MaterialApp(
       debugShowCheckedModeBanner: false,
 
-      // Light theme
       theme: AppTheme.light,
-
-      // Dark theme
       darkTheme: AppTheme.dark,
-
-      // Follow the device's theme automatically
       themeMode: ThemeMode.system,
 
+      // Remove: home: const SplashScreen()
+      // Keep initialRoute as '/'
 
-      home: const SplashScreen(),
+      initialRoute: '/',
 
       routes: {
+        '/': (context) => const AuthCheckScreen(),
+
+        '/login': (context) => const LoginScreen(),
+
         '/wallet': (context) {
           final accessToken =
           ModalRoute.of(context)!.settings.arguments as String;
