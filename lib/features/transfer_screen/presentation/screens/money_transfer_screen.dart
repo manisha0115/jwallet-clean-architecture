@@ -9,7 +9,12 @@ import '../bloc/transfer_event.dart';
 import '../bloc/transfer_state.dart';
 
 class MoneyTransferScreen extends StatefulWidget {
-  const MoneyTransferScreen({super.key});
+  final String accessToken;
+
+  const MoneyTransferScreen({
+    super.key,
+    required this.accessToken,
+  });
 
   @override
   State<MoneyTransferScreen> createState() =>
@@ -24,15 +29,10 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
   final _amountController = TextEditingController();
   final _remarksController = TextEditingController();
 
-  // Replace with your actual authentication/token storage.
-  final String _token = 'mock_access_token_123';
-
   bool _isSubmitting = false;
   String? _idempotencyKey;
 
   static const Color _primaryColor = Color(0xFF243B80);
-  static const Color _backgroundColor = Color(0xFFF5F7FB);
-  static const Color _textColor = Color(0xFF18233A);
 
   @override
   void dispose() {
@@ -42,6 +42,8 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
     _remarksController.dispose();
     super.dispose();
   }
+
+  // -------------------- VALIDATION --------------------
 
   String? _validateRequired(String? value, String label) {
     if (value == null || value.trim().isEmpty) {
@@ -68,6 +70,8 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
     return null;
   }
 
+  // -------------------- SUBMIT TRANSFER --------------------
+
   void _submitTransfer() {
     if (_isSubmitting) return;
 
@@ -75,14 +79,13 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
 
     if (!_formKey.currentState!.validate()) return;
 
-    final amount =
-    double.tryParse(_amountController.text.trim());
+    final amount = double.tryParse(_amountController.text.trim());
 
     if (amount == null || !amount.isFinite || amount <= 0) {
       return;
     }
 
-    // Reuse the key if the same transfer is retried.
+    // Keep the same key when retrying a failed request.
     _idempotencyKey ??=
     'transfer-${DateTime.now().microsecondsSinceEpoch}';
 
@@ -97,7 +100,8 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
       SubmitTransfer(
         request: request,
         headers: {
-          'Authorization': 'Bearer $_token',
+          'Authorization': 'Bearer ${widget.accessToken}',
+          'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
         idempotencyKey: _idempotencyKey!,
@@ -105,13 +109,17 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
     );
   }
 
+
   void _resetForm() {
     _beneficiaryController.clear();
     _mobileController.clear();
     _amountController.clear();
     _remarksController.clear();
     _idempotencyKey = null;
+
+    _formKey.currentState?.reset();
   }
+
 
   void _showSuccessDialog(TransferSuccess state) {
     final data = state.response.data;
@@ -120,63 +128,108 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
+        final colors = Theme.of(dialogContext).colorScheme;
+
         return AlertDialog(
+          backgroundColor: colors.surface,
+          surfaceTintColor: Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.check_circle,
-                color: Colors.green,
-                size: 64,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Transfer Successful',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: _textColor,
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.green,
+                  size: 64,
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '${data.currency} '
-                    '${data.amount.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 25,
-                  fontWeight: FontWeight.bold,
-                  color: _primaryColor,
+                const SizedBox(height: 16),
+                Text(
+                  'Transfer Successful!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: colors.onSurface,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              _detailRow(
-                'Transaction ID',
-                data.transactionId,
-              ),
-              const SizedBox(height: 10),
-              _detailRow('Status', data.status),
-              const SizedBox(height: 10),
-              _detailRow(
-                'Available balance',
-                '${data.currency} '
-                    '${data.availableBalance.toStringAsFixed(2)}',
-              ),
-            ],
+                const SizedBox(height: 8),
+                Text(
+                  'Your money has been transferred successfully.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  '${data.currency} '
+                      '${data.amount.toStringAsFixed(2)}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 25,
+                    fontWeight: FontWeight.bold,
+                    color: colors.primary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                _detailRow(
+                  dialogContext,
+                  'Transaction ID',
+                  data.transactionId,
+                ),
+                const SizedBox(height: 12),
+                _detailRow(
+                  dialogContext,
+                  'Status',
+                  data.status,
+                ),
+                const SizedBox(height: 12),
+                _detailRow(
+                  dialogContext,
+                  'Available Balance',
+                  '${data.currency} '
+                      '${data.availableBalance.toStringAsFixed(2)}',
+                ),
+              ],
+            ),
           ),
           actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                _resetForm();
-              },
-              child: const Text(
-                'Done',
-                style: TextStyle(
-                  color: _primaryColor,
-                  fontWeight: FontWeight.w600,
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  // Close the success dialog first.
+                  Navigator.of(dialogContext).pop();
+
+                  // Clear the completed transfer form.
+                  _resetForm();
+
+                  // Return to the Wallet screen with success result.
+                  if (mounted) {
+                    Navigator.of(context).pop(true);
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colors.primary,
+                  foregroundColor: colors.onPrimary,
+                  minimumSize: const Size.fromHeight(48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Text(
+                  'Done',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black,
+                  ),
                 ),
               ),
             ),
@@ -186,15 +239,23 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
     );
   }
 
-  Widget _detailRow(String label, String value) {
+  // -------------------- DIALOG DETAIL ROW --------------------
+
+  Widget _detailRow(
+      BuildContext context,
+      String label,
+      String value,
+      ) {
+    final colors = Theme.of(context).colorScheme;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
           child: Text(
             '$label:',
-            style: const TextStyle(
-              color: Colors.black54,
+            style: TextStyle(
+              color: colors.onSurfaceVariant,
               fontSize: 13,
             ),
           ),
@@ -204,8 +265,8 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
           child: Text(
             value,
             textAlign: TextAlign.end,
-            style: const TextStyle(
-              color: _textColor,
+            style: TextStyle(
+              color: colors.onSurface,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
@@ -215,8 +276,14 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
     );
   }
 
+  // -------------------- SCREEN UI --------------------
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return BlocListener<TransferBloc, TransferState>(
       listener: (context, state) {
         if (!mounted) return;
@@ -228,8 +295,6 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
         }
 
         if (state is TransferSuccess) {
-          // The transfer completed successfully.
-          _idempotencyKey = null;
           _showSuccessDialog(state);
         } else if (state is TransferFailure) {
           ScaffoldMessenger.of(context)
@@ -244,16 +309,16 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: _backgroundColor,
+        backgroundColor: theme.scaffoldBackgroundColor,
         appBar: AppBar(
           title: const Text(
             'Money Transfer',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontWeight: FontWeight.w600),
           ),
-          backgroundColor: Colors.white,
-          foregroundColor: _textColor,
+          backgroundColor: theme.appBarTheme.backgroundColor ??
+              theme.scaffoldBackgroundColor,
+          foregroundColor:
+          theme.appBarTheme.foregroundColor ?? colors.onSurface,
           elevation: 0,
           centerTitle: false,
         ),
@@ -263,10 +328,11 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
+                // Header card
                 Container(
                   padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(
-                    color: _primaryColor,
+                    color: colors.primary,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Column(
@@ -297,24 +363,27 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
                     ],
                   ),
                 ),
+
                 const SizedBox(height: 28),
 
-                _label('Beneficiary Name'),
+                _label(context, 'Beneficiary Name'),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _beneficiaryController,
                   textCapitalization: TextCapitalization.words,
                   textInputAction: TextInputAction.next,
                   decoration: _decoration(
+                    context,
                     'Enter beneficiary name',
                     Icons.person_outline,
                   ),
                   validator: (value) =>
                       _validateRequired(value, 'beneficiary name'),
                 ),
+
                 const SizedBox(height: 20),
 
-                _label('Mobile Number'),
+                _label(context, 'Mobile Number'),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _mobileController,
@@ -326,19 +395,20 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
                     LengthLimitingTextInputFormatter(10),
                   ],
                   decoration: _decoration(
+                    context,
                     'Enter 10-digit mobile number',
                     Icons.phone_android,
                   ).copyWith(counterText: ''),
                   validator: _validateMobile,
                 ),
+
                 const SizedBox(height: 20),
 
-                _label('Amount (INR)'),
+                _label(context, 'Amount (INR)'),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _amountController,
-                  keyboardType:
-                  const TextInputType.numberWithOptions(
+                  keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
                   ),
                   textInputAction: TextInputAction.next,
@@ -348,14 +418,16 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
                     ),
                   ],
                   decoration: _decoration(
+                    context,
                     'Enter transfer amount',
                     Icons.currency_rupee,
                   ),
                   validator: _validateAmount,
                 ),
+
                 const SizedBox(height: 20),
 
-                _label('Remarks (Optional)'),
+                _label(context, 'Remarks (Optional)'),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _remarksController,
@@ -363,10 +435,12 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
                   maxLines: 3,
                   maxLength: 200,
                   decoration: _decoration(
+                    context,
                     'Add a note for this transfer',
                     Icons.notes,
                   ),
                 ),
+
                 const SizedBox(height: 28),
 
                 SizedBox(
@@ -375,9 +449,12 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
                     onPressed:
                     _isSubmitting ? null : _submitTransfer,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _primaryColor,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: Colors.grey,
+                      backgroundColor: colors.primary,
+                      foregroundColor: colors.onPrimary,
+                      disabledBackgroundColor:
+                      isDark ? Colors.grey.shade800 : Colors.grey.shade400,
+                      disabledForegroundColor:
+                      isDark ? Colors.white70 : Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -392,37 +469,42 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
                         color: Colors.white,
                       ),
                     )
-                        : const Text(
+                        :Text(
                       'Transfer Money',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white
+                            : Colors.white,
                       ),
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 18),
 
-                const Row(
+                Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
                       Icons.lock_outline,
                       size: 16,
-                      color: Colors.black54,
+                      color: colors.onSurfaceVariant,
                     ),
-                    SizedBox(width: 6),
+                    const SizedBox(width: 6),
                     Flexible(
                       child: Text(
                         'Your transfer is processed securely',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.black54,
+                          color: colors.onSurfaceVariant,
                         ),
                       ),
                     ),
                   ],
                 ),
+
                 const SizedBox(height: 20),
               ],
             ),
@@ -432,62 +514,72 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
     );
   }
 
-  Widget _label(String text) {
+  // -------------------- FIELD LABEL --------------------
+
+  Widget _label(BuildContext context, String text) {
+    final colors = Theme.of(context).colorScheme;
+
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontWeight: FontWeight.w600,
         fontSize: 14,
-        color: _textColor,
+        color: colors.onSurface,
       ),
     );
   }
 
+  // -------------------- FIELD DECORATION --------------------
+
   InputDecoration _decoration(
+      BuildContext context,
       String hint,
       IconData icon,
       ) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
     return InputDecoration(
       hintText: hint,
+      hintStyle: TextStyle(
+        color: colors.onSurfaceVariant,
+      ),
       prefixIcon: Icon(
         icon,
-        color: _primaryColor,
+        color: colors.primary,
       ),
       filled: true,
-      fillColor: Colors.white,
+      fillColor: colors.surface,
       contentPadding: const EdgeInsets.symmetric(
         horizontal: 16,
         vertical: 16,
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(
-          color: Color(0xFFE2E7F0),
-        ),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(
-          color: Color(0xFFE2E7F0),
+        borderSide: BorderSide(
+          color: colors.outlineVariant,
         ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(
-          color: _primaryColor,
+        borderSide: BorderSide(
+          color: colors.primary,
           width: 1.5,
         ),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(
-          color: Colors.red,
+        borderSide: BorderSide(
+          color: colors.error,
         ),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(
-          color: Colors.red,
+        borderSide: BorderSide(
+          color: colors.error,
           width: 1.5,
         ),
       ),

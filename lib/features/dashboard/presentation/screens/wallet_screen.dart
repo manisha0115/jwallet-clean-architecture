@@ -2,7 +2,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../di/injection.dart';
 import '../../../../domain/repositories/wallet_repository.dart';
+import '../../../../domain/usecase/money_transfer_usecase.dart';
+import '../../../transactions/presentation/bloc/transactions_bloc.dart';
+import '../../../transactions/presentation/bloc/transactions_event.dart';
+import '../../../transactions/presentation/screens/transactions_screen.dart';
+import '../../../transfer_screen/presentation/bloc/transfer_bloc.dart';
+import '../../../transfer_screen/presentation/screens/money_transfer_screen.dart';
 import '../bloc/wallet_bloc.dart';
 import '../bloc/wallet_event.dart';
 import '../bloc/wallet_state.dart';
@@ -11,16 +18,19 @@ import '../bloc/wallet_state.dart';
 
 class WalletScreen extends StatelessWidget {
   final WalletRepository walletRepository;
+  final MoneyTransferUseCase moneyTransferUseCase;
   final String accessToken;
 
   const WalletScreen({
     super.key,
     required this.walletRepository,
+    required this.moneyTransferUseCase,
     required this.accessToken,
   });
 
   @override
   Widget build(BuildContext context) {
+
     final headers = <String, String>{
       'Authorization': 'Bearer $accessToken',
       'Accept': 'application/json',
@@ -29,30 +39,42 @@ class WalletScreen extends StatelessWidget {
     return BlocProvider(
       create: (_) => WalletBloc(walletRepository)
         ..add(GetWalletBalanceEvent(headers: headers)),
-      child: _WalletView(headers: headers),
+      child: _WalletView(
+        headers: headers,
+        accessToken: accessToken,
+        moneyTransferUseCase: moneyTransferUseCase,
+      ),
     );
   }
 }
 
 class _WalletView extends StatelessWidget {
   final Map<String, String> headers;
+  final String accessToken;
+  final MoneyTransferUseCase moneyTransferUseCase;
 
-  const _WalletView({required this.headers});
+  const _WalletView({
+    required this.headers,
+    required this.accessToken,
+    required this.moneyTransferUseCase,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FB),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text(
           'My Wallet',
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         centerTitle: false,
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF172554),
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
         elevation: 0,
       ),
       body: BlocBuilder<WalletBloc, WalletState>(
@@ -88,15 +110,16 @@ class _WalletView extends StatelessWidget {
                       state is WalletFailure,
                 );
               },
+
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(20),
                 children: [
-                  const Text(
+                  Text(
                     'Available Balance',
                     style: TextStyle(
                       fontSize: 16,
-                      color: Color(0xFF64748B),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -215,31 +238,101 @@ class _WalletView extends StatelessWidget {
                     ),
                   ),
 
+                  const SizedBox(height: 24),
+
+// Wallet actions
+                  // Wallet actions
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _actionButton(
+                          context: context,
+                          icon: Icons.send_rounded,
+                          title: 'Send Money',
+                          onTap: () async {
+                            final transferred = await Navigator.push<bool>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => BlocProvider<TransferBloc>(
+                                  create: (_) => TransferBloc(moneyTransferUseCase),
+                                  child: MoneyTransferScreen(
+                                    accessToken: accessToken,
+                                  ),
+                                ),
+                              ),
+                            );
+
+                            if (!context.mounted) return;
+
+                            if (transferred == true) {
+                              context.read<WalletBloc>().add(
+                                GetWalletBalanceEvent(headers: headers),
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _actionButton(
+                          context: context,
+                          icon: Icons.receipt_long_rounded,
+                          title: 'Transactions',
+                          onTap: () async {
+                            final headers = <String, String>{
+                              'Authorization': 'Bearer $accessToken',
+                              'Accept': 'application/json',
+                            };
+
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => BlocProvider<TransactionBloc>(
+                                  create: (_) => TransactionBloc(transactionsUsecase)
+                                    ..add(LoadTransactions(headers: headers)),
+                                  child: TransactionHistoryScreen(
+                                    accessToken: accessToken,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+
                   const SizedBox(height: 28),
 
-                  const Text(
+
+                  const SizedBox(height: 28),
+
+                  Text(
                     'Wallet Details',
                     style: TextStyle(
                       fontSize: 19,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF172554),
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 14),
 
                   _detailTile(
+                    context: context,
                     icon: Icons.account_balance_outlined,
                     title: 'Wallet ID',
                     value: wallet.walletId,
                   ),
                   const SizedBox(height: 12),
                   _detailTile(
+                    context: context,
                     icon: Icons.currency_exchange,
                     title: 'Currency',
                     value: wallet.currency,
                   ),
                   const SizedBox(height: 12),
                   _detailTile(
+                    context: context,
                     icon: Icons.account_box_outlined,
                     title: 'Account Number',
                     value: wallet.maskedAccountNumber,
@@ -247,27 +340,29 @@ class _WalletView extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      context.read<WalletBloc>().add(
-                        GetWalletBalanceEvent(
-                          headers: headers,
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Refresh Balance'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(50),
-                      foregroundColor: const Color(0xFF21366D),
-                      side: const BorderSide(
-                        color: Color(0xFF21366D),
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
+
+
+            OutlinedButton.icon(
+              onPressed: () {
+                context.read<WalletBloc>().add(
+                  GetWalletBalanceEvent(
+                    headers: headers,
                   ),
+                );
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Refresh Balance'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(50),
+                foregroundColor: isDark ? Colors.white : const Color(0xFF21366D),
+                side: BorderSide(
+                  color: isDark ? Colors.white : const Color(0xFF21366D),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
                 ],
               ),
             );
@@ -327,28 +422,34 @@ class _WalletView extends StatelessWidget {
   }
 
   Widget _detailTile({
+    required BuildContext context,
     required IconData icon,
     required String title,
     required String value,
   }) {
+    final theme = Theme.of(context);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardTheme.color ??
+            theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE8ECF3)),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant,
+        ),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFEAF0FF),
+              color: theme.colorScheme.primaryContainer,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               icon,
-              color: const Color(0xFF21366D),
+              color: theme.colorScheme.onPrimaryContainer,
             ),
           ),
           const SizedBox(width: 14),
@@ -358,18 +459,18 @@ class _WalletView extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: Color(0xFF64748B),
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 5),
                 Text(
                   value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF172554),
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
               ],
@@ -379,4 +480,53 @@ class _WalletView extends StatelessWidget {
       ),
     );
   }
+
+  Widget _actionButton({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.cardTheme.color ?? theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            vertical: 20,
+            horizontal: 12,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: theme.colorScheme.outlineVariant,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 28,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
 }

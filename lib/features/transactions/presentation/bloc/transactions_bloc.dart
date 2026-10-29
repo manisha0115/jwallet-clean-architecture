@@ -1,4 +1,3 @@
-
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../domain/usecase/get_transactions_usecase.dart';
@@ -21,20 +20,25 @@ class TransactionBloc
       ) async {
     emit(TransactionLoading());
 
-    final result = await getTransactionsUseCase(event.headers);
+    try {
+      final result = await getTransactionsUseCase(event.headers);
 
-    result.fold(
-          (error) {
-        emit(TransactionFailure(error.toString()));
-      },
-          (response) {
-        emit(
-          TransactionLoaded(
-            transactions: response.data,
-          ),
-        );
-      },
-    );
+      result.fold(
+            (error) {
+          emit(TransactionFailure(error.toString()));
+        },
+            (response) {
+          // Empty response is valid: show the empty state, not loading.
+          emit(
+            TransactionLoaded(
+              transactions: response.data,
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      emit(TransactionFailure('Failed to load transactions: $e'));
+    }
   }
 
   void _onFilterTransactions(

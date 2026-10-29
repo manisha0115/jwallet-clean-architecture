@@ -1,4 +1,6 @@
 
+import 'package:flutter/cupertino.dart';
+
 import '../../../../core/network/api_client.dart';
 import '../../domain/entities/login_request_params.dart';
 
@@ -17,17 +19,23 @@ class AuthRemoteDataSourceImpl
 
   AuthRemoteDataSourceImpl(this._client);
 
+
   @override
   Future<LoginResponseModel> login(
       LoginRequestParams params,
       ) async {
+    debugPrint('LoginRemoteDataSource: login() called');
+
     final response = await _client.post(
-      'api/v1/auth/logi',
+      'api/v1/auth/login',
       params: params.toJson(),
     );
+
+    debugPrint('LoginRemoteDataSource: response received');
 
     return LoginResponseModel.fromJson(
       Map<String, dynamic>.from(response as Map),
     );
   }
+
 }

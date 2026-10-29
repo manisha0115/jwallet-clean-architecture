@@ -1,10 +1,10 @@
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-// Update this import to your actual LoginScreen location.
-import 'features/auth/presentation/screens/login_screen.dart';
 
+import 'features/auth/presentation/screens/login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});

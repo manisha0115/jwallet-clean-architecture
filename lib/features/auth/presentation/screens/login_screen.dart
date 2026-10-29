@@ -45,9 +45,13 @@ class _LoginScreenState extends State<LoginScreen> {
               child: BlocConsumer<LoginBloc, LoginState>(
                 listener: (context, state) {
                   if (state is LoginSuccess) {
+                    final accessToken =
+                        state.response.data.accessToken;
+
                     Navigator.pushReplacementNamed(
                       context,
-                      '/dashboard',
+                      '/wallet',
+                      arguments: accessToken,
                     );
                   } else if (state is LoginFailure) {
                     ScaffoldMessenger.of(context).showSnackBar(

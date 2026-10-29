@@ -7,24 +7,38 @@ import '../bloc/transactions_bloc.dart';
 import '../bloc/transactions_event.dart';
 import '../bloc/transactions_state.dart';
 
-class TransactionHistoryScreen extends StatelessWidget {
-  const TransactionHistoryScreen({super.key});
+class TransactionHistoryScreen extends StatefulWidget {
+  final String accessToken;
 
+  const TransactionHistoryScreen({
+    super.key,
+    required this.accessToken,
+  });
+  @override
+  State<TransactionHistoryScreen> createState() => _TransactionHistoryScreenState();
+}
+
+class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
+
+  late final isDark =
+      Theme.of(context).brightness == Brightness.dark;
   @override
   Widget build(BuildContext context) {
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FB),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text(
           'Transaction History',
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF18233A),
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
         elevation: 0,
       ),
       body: BlocBuilder<TransactionBloc, TransactionState>(
         builder: (context, state) {
+          // Loading
           if (state is TransactionInitial ||
               state is TransactionLoading) {
             return const Center(
@@ -32,6 +46,7 @@ class TransactionHistoryScreen extends StatelessWidget {
             );
           }
 
+          // API error
           if (state is TransactionFailure) {
             return Center(
               child: Padding(
@@ -41,8 +56,8 @@ class TransactionHistoryScreen extends StatelessWidget {
                   children: [
                     const Icon(
                       Icons.error_outline,
-                      color: Colors.redAccent,
                       size: 48,
+                      color: Colors.redAccent,
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -51,7 +66,9 @@ class TransactionHistoryScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(
-                      onPressed: () => _reload(context),
+                      onPressed: () {
+                        _reload(context);
+                      },
                       child: const Text('Retry'),
                     ),
                   ],
@@ -60,15 +77,59 @@ class TransactionHistoryScreen extends StatelessWidget {
             );
           }
 
+          // Unexpected state
           if (state is! TransactionLoaded) {
-            return const SizedBox.shrink();
+            return const Center(
+              child: Text('Unable to load transactions'),
+            );
           }
 
           final transactions = state.filteredTransactions;
 
+          // No data after filtering
+          if (transactions.isEmpty) {
+            return RefreshIndicator(
+              onRefresh: () async {
+                _reload(context);
+                await context.read<TransactionBloc>().stream.firstWhere(
+                      (state) =>
+                  state is TransactionLoaded ||
+                      state is TransactionFailure,
+                );
+              },
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 140),
+                  Icon(
+                    Icons.receipt_long_outlined,
+                    size: 56,
+                    color: Colors.grey,
+                  ),
+                  SizedBox(height: 16),
+                  Center(
+                    child: Text(
+                      'No transaction history found',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          // Data found
           return RefreshIndicator(
             onRefresh: () async {
               _reload(context);
+              await context.read<TransactionBloc>().stream.firstWhere(
+                    (state) =>
+                state is TransactionLoaded ||
+                    state is TransactionFailure,
+              );
             },
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -76,36 +137,20 @@ class TransactionHistoryScreen extends StatelessWidget {
               children: [
                 _summaryCard(state.transactions),
                 const SizedBox(height: 24),
-                const Text(
+                Text(
                   'Recent Transactions',
                   style: TextStyle(
                     fontSize: 19,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF18233A),
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 14),
                 _filterBar(context, state.selectedFilter),
                 const SizedBox(height: 16),
-                if (transactions.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 40),
-                    child: Center(
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.receipt_long_outlined,
-                            size: 48,
-                            color: Colors.grey,
-                          ),
-                          SizedBox(height: 12),
-                          Text('No transactions found'),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  ...transactions.map(_transactionCard),
+                ...transactions.map(
+                      (transaction) => _transactionCard(context, transaction),
+                ),
               ],
             ),
           );
@@ -115,14 +160,14 @@ class TransactionHistoryScreen extends StatelessWidget {
   }
 
   void _reload(BuildContext context) {
-    final bloc = context.read<TransactionBloc>();
-    final currentState = bloc.state;
-
-    if (currentState is TransactionLoaded) {
-      // The event needs headers. Keep them available in your
-      // app/session layer and pass them here.
-      return;
-    }
+    context.read<TransactionBloc>().add(
+      LoadTransactions(
+        headers: {
+          'Authorization': 'Bearer ${widget.accessToken}',
+          'Accept': 'application/json',
+        },
+      ),
+    );
   }
 
   Widget _summaryCard(List<Datum> transactions) {
@@ -204,7 +249,8 @@ class TransactionHistoryScreen extends StatelessWidget {
 
   Widget _filterBar(BuildContext context, String selected) {
     const filters = ['All', 'Credit', 'Debit', 'Pending'];
-
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -221,10 +267,17 @@ class TransactionHistoryScreen extends StatelessWidget {
                     .read<TransactionBloc>()
                     .add(FilterTransactions(filter));
               },
-              selectedColor: const Color(0xFF243B80),
-              backgroundColor: Colors.white,
+              selectedColor: colors.primary,
+              backgroundColor: isDark
+                  ? colors.surface
+                  : Colors.white,
+              checkmarkColor: Colors.white,
+              showCheckmark: true,
               labelStyle: TextStyle(
-                color: active ? Colors.white : Colors.black87,
+                color: active
+                    ? Colors.white
+                    : (isDark ? Colors.white : Colors.black),
+                fontWeight: FontWeight.w500,
               ),
             ),
           );
@@ -233,120 +286,131 @@ class TransactionHistoryScreen extends StatelessWidget {
     );
   }
 
-  Widget _transactionCard(Datum transaction) {
+  Widget _transactionCard(
+      BuildContext context,
+      Datum transaction,
+      ) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
     final isCredit = transaction.type.toUpperCase() == 'CREDIT';
+    final isPending =
+        transaction.status.toUpperCase() == 'PENDING';
 
     final amountColor = isCredit
-        ? const Color(0xFF15976B)
-        : const Color(0xFFDF5353);
+        ? Colors.green
+        : Colors.redAccent;
 
-    final status = transaction.status.toUpperCase();
-    final statusColor = status == 'SUCCESS'
-        ? const Color(0xFF15976B)
-        : status == 'PENDING'
+    final statusColor = isPending
         ? Colors.orange
-        : status == 'FAILED'
-        ? Colors.redAccent
-        : Colors.blueGrey;
+        : Colors.green;
+
+    final beneficiaryName =
+    transaction.beneficiaryName.trim().isNotEmpty
+        ? transaction.beneficiaryName
+        : 'Unknown beneficiary';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardTheme.color ?? colors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE9EDF4)),
+        border: Border.all(
+          color: colors.outlineVariant,
+        ),
       ),
-      child: Column(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: amountColor.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  isCredit
-                      ? Icons.south_west_rounded
-                      : Icons.north_east_rounded,
-                  color: amountColor,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      transaction.beneficiaryName.isEmpty
-                          ? 'Unknown beneficiary'
-                          : transaction.beneficiaryName,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${transaction.type} • ${transaction.id}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.black54,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  '${isCredit ? '+' : '-'}'
-                      '${transaction.currency == 'INR' ? '₹' : '${transaction.currency} '}'
-                      '${transaction.amount.toStringAsFixed(2)}',
-                  textAlign: TextAlign.end,
-                  style: TextStyle(
-                    color: amountColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ],
+          // Transaction type icon
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: isCredit
+                  ? Colors.green.withValues(alpha: 0.12)
+                  : Colors.redAccent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              isCredit
+                  ? Icons.arrow_downward_rounded
+                  : Icons.arrow_upward_rounded,
+              color: amountColor,
+              size: 24,
+            ),
           ),
-          const Divider(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _formatDate(transaction.createdAt),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.black54,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  transaction.status,
+
+          const SizedBox(width: 12),
+
+          // Transaction information
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  beneficiaryName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: statusColor,
-                    fontSize: 11,
+                    color: colors.onSurface,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+
+                const SizedBox(height: 5),
+
+                Text(
+                  '${transaction.type} • ${_formatDate(transaction.createdAt)}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colors.onSurfaceVariant,
+                    fontSize: 11,
+                  ),
+                ),
+
+                const SizedBox(height: 7),
+
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    transaction.status,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Transaction amount
+          Flexible(
+            child: Text(
+              '${isCredit ? '+' : '-'}₹${transaction.amount.toStringAsFixed(2)}',
+              textAlign: TextAlign.end,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: amountColor,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
               ),
-            ],
+            ),
           ),
         ],
       ),

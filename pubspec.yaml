@@ -18,11 +18,24 @@ dependencies:
   dartz: ^0.10.1
   http: ^1.6.0
   flutter_screenutil: ^5.9.3
+  lottie: ^3.3.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  build_runner: ^2.4.15
+  flutter_native_splash: ^2.4.6
+
+flutter_native_splash:
+  color: "#FFFFFF"
+
+  android: true
+  ios: true
+  web: false
+
+  android_12:
+    color: "#FFFFFF"
 
 flutter:
   uses-material-design: true
+

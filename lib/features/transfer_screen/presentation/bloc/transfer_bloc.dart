@@ -1,3 +1,4 @@
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../domain/usecase/money_transfer_usecase.dart';
@@ -26,13 +27,17 @@ class TransferBloc extends Bloc<TransferEvent, TransferState> {
 
       result.fold(
             (error) {
-          emit(TransferFailure(error.toString()));
+          emit(
+            TransferFailure(error.toString()),
+          );
         },
             (response) {
           if (response.success) {
             emit(TransferSuccess(response));
           } else {
-            emit(TransferFailure('Money transfer failed.'));
+            emit(
+              TransferFailure('Money transfer failed.'),
+            );
           }
         },
       );
