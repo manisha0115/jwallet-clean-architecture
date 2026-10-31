@@ -10,10 +10,12 @@ import '../bloc/transfer_state.dart';
 
 class MoneyTransferScreen extends StatefulWidget {
   final String accessToken;
+  final double availableBalance;
 
   const MoneyTransferScreen({
     super.key,
     required this.accessToken,
+    required this.availableBalance,
   });
 
   @override
@@ -85,7 +87,39 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
       return;
     }
 
-    // Keep the same key when retrying a failed request.
+    // Check available wallet balance before API call.
+    if (amount > widget.availableBalance) {
+      final theme = Theme.of(context);
+      final colors = theme.colorScheme;
+      final isDark = theme.brightness == Brightness.dark;
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              'Insufficient wallet balance. '
+                  'Available balance: ₹${widget.availableBalance.toStringAsFixed(2)}',
+              style: TextStyle(
+                color: isDark ? Colors.white : colors.onPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            backgroundColor: colors.primary,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+
+      return;
+    }
+
+    // Generate idempotency key.
     _idempotencyKey ??=
     'transfer-${DateTime.now().microsecondsSinceEpoch}';
 
@@ -296,14 +330,15 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
 
         if (state is TransferSuccess) {
           _showSuccessDialog(state);
-        }else if (state is TransferFailure) {
+        } else if (state is TransferFailure) {
           final errorMessage = state.message.toLowerCase();
 
           String displayMessage;
 
           if (errorMessage.contains('insufficient')) {
             displayMessage =
-            'Insufficient wallet balance. Please enter a lower amount.';
+            'Insufficient wallet balance. Your available balance is '
+                '₹${widget.availableBalance.toStringAsFixed(2)}.';
           } else {
             displayMessage = state.message;
           }
@@ -312,33 +347,8 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
             ..hideCurrentSnackBar()
             ..showSnackBar(
               SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        displayMessage,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                content: Text(displayMessage),
                 backgroundColor: Colors.red.shade700,
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 4),
-                margin: const EdgeInsets.all(16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
               ),
             );
         }

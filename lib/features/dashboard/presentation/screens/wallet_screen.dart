@@ -371,16 +371,20 @@ class _WalletView extends StatelessWidget {
                                   create: (_) => TransferBloc(moneyTransferUseCase),
                                   child: MoneyTransferScreen(
                                     accessToken: accessToken,
+                                    availableBalance: wallet.availableBalance.toDouble(),
                                   ),
                                 ),
                               ),
                             );
 
-                            if (!context.mounted) return;
-
                             if (transferred == true) {
                               context.read<WalletBloc>().add(
-                                GetWalletBalanceEvent(headers: headers),
+                                GetWalletBalanceEvent(
+                                  headers: {
+                                    'Authorization': 'Bearer $accessToken',
+                                    'Content-Type': 'application/json',
+                                  },
+                                ),
                               );
                             }
                           },
