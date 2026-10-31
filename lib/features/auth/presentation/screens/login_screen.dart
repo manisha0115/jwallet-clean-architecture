@@ -126,21 +126,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           textInputAction: TextInputAction.done,
                         ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Connect forgot-password flow when API is available.',
-                                  ),
-                                ),
-                              );
-                            },
-                            child: const Text('Forgot password?'),
-                          ),
-                        ),
                         const SizedBox(height: 12),
                         AppButton(
                           title: 'Sign In',

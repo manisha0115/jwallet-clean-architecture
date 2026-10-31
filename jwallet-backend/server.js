@@ -9,7 +9,7 @@ app.use(express.json());
 let walletBalance = 25450.75;
 const VALID_TOKEN = "mock_access_token_123";
 
-
+const processedTransfers = new Map();
 let transactions = [
   {
     id: "TXN10001",
@@ -173,102 +173,126 @@ app.get('/api/v1/transactions', checkAuth, (req, res) => {
 let nextTxnId = 10011;
 
 
+
+let nextTxnId = 10011;
+
 app.post('/api/v1/transactions/transfer', checkAuth, (req, res) => {
-  const {
-    beneficiaryName,
-    mobileNumber,
-    amount,
-    remarks = ''
-  } = req.body;
-
-  const idempotencyKey = req.get('Idempotency-Key');
-  const token = req.get('Authorization');
-
-  if (!idempotencyKey) {
-    return res.status(400).json({
-      success: false,
-      message: 'Idempotency-Key header is required'
+  try {
+    console.log('========== TRANSFER API STARTED ==========');
+    console.log('Request Body:', req.body);
+    console.log('Request Headers:', {
+      authorization: req.headers.authorization ? 'Present' : 'Missing',
+      idempotencyKey: req.headers['idempotency-key']
     });
-  }
 
-  // Scope the key to the authenticated request.
-  const requestKey = `${token}:${idempotencyKey}`;
+    const {
+      beneficiaryName,
+      mobileNumber,
+      amount,
+      remarks = ''
+    } = req.body || {};
 
-  // Return the original response if the same request is retried.
-  if (processedTransfers.has(requestKey)) {
-    const previous = processedTransfers.get(requestKey);
+    const idempotencyKey = req.get('Idempotency-Key');
+    const token = req.get('Authorization');
 
-    return res.status(previous.statusCode).json(previous.body);
-  }
+    if (!idempotencyKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'Idempotency-Key header is required'
+      });
+    }
 
-  const transferAmount = Number(amount);
-  const normalizedMobile = String(mobileNumber || '').trim();
-  const normalizedName = String(beneficiaryName || '').trim();
+    const requestKey = `${token}:${idempotencyKey}`;
 
-  if (
-    !normalizedName ||
-    !/^[0-9]{10}$/.test(normalizedMobile) ||
-    !Number.isFinite(transferAmount) ||
-    transferAmount <= 0 ||
-    !/^\d+(\.\d{1,2})?$/.test(String(amount)) ||
-    !Number.isFinite(transferAmount * 100) ||
-    !Number.isSafeInteger(Math.round(transferAmount * 100))
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: 'Enter valid beneficiary details and amount'
-    });
-  }
+    if (processedTransfers.has(requestKey)) {
+      console.log('Duplicate transfer request');
 
-  // Compare integer paise to avoid floating-point balance errors.
-  const amountInPaise = Math.round(transferAmount * 100);
-  const balanceInPaise = Math.round(walletBalance * 100);
+      const previous = processedTransfers.get(requestKey);
 
-  if (amountInPaise > balanceInPaise) {
-    return res.status(400).json({
-      success: false,
-      message: 'Insufficient wallet balance'
-    });
-  }
+      return res.status(previous.statusCode).json(previous.body);
+    }
 
-  // Perform the transfer once.
-  walletBalance = (balanceInPaise - amountInPaise) / 100;
+    const transferAmount = Number(amount);
+    const normalizedMobile = String(mobileNumber || '').trim();
+    const normalizedName = String(beneficiaryName || '').trim();
 
-  const transactionId = `TXN${nextTxnId++}`;
+    if (
+      !normalizedName ||
+      !/^[0-9]{10}$/.test(normalizedMobile) ||
+      !Number.isFinite(transferAmount) ||
+      transferAmount <= 0 ||
+      !/^\d+(\.\d{1,2})?$/.test(String(amount)) ||
+      !Number.isSafeInteger(Math.round(transferAmount * 100))
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Enter valid beneficiary details and amount'
+      });
+    }
 
-  const newTxn = {
-    id: transactionId,
-    type: 'DEBIT',
-    amount: amountInPaise / 100,
-    currency: 'INR',
-    beneficiaryName: normalizedName,
-    mobileNumber: normalizedMobile,
-    remarks: String(remarks || '').trim(),
-    status: 'SUCCESS',
-    createdAt: new Date().toISOString()
-  };
+    const amountInPaise = Math.round(transferAmount * 100);
+    const balanceInPaise = Math.round(walletBalance * 100);
 
-  transactions.unshift(newTxn);
+    if (amountInPaise > balanceInPaise) {
+      return res.status(400).json({
+        success: false,
+        message: 'Insufficient wallet balance'
+      });
+    }
 
-  const responseBody = {
-    success: true,
-    data: {
-      transactionId,
-      status: 'SUCCESS',
+    walletBalance = (balanceInPaise - amountInPaise) / 100;
+
+    const transactionId = `TXN${nextTxnId++}`;
+
+    const newTxn = {
+      id: transactionId,
+      type: 'DEBIT',
       amount: amountInPaise / 100,
       currency: 'INR',
-      availableBalance: Number(walletBalance.toFixed(2))
-    }
-  };
+      beneficiaryName: normalizedName,
+      mobileNumber: normalizedMobile,
+      remarks: String(remarks || '').trim(),
+      status: 'SUCCESS',
+      createdAt: new Date().toISOString()
+    };
 
-  // Save the result only after the transfer succeeds.
-  processedTransfers.set(requestKey, {
-    statusCode: 200,
-    body: responseBody
-  });
+    transactions.unshift(newTxn);
 
-  return res.status(200).json(responseBody);
+    const responseBody = {
+      success: true,
+      data: {
+        transactionId,
+        status: 'SUCCESS',
+        amount: amountInPaise / 100,
+        currency: 'INR',
+        availableBalance: Number(walletBalance.toFixed(2))
+      }
+    };
+
+    processedTransfers.set(requestKey, {
+      statusCode: 200,
+      body: responseBody
+    });
+
+    console.log('Transfer successful:', responseBody);
+    console.log('========== TRANSFER API COMPLETED ==========');
+
+    return res.status(200).json(responseBody);
+
+  } catch (error) {
+    console.error('========== TRANSFER API ERROR ==========');
+    console.error('Error Message:', error.message);
+    console.error('Error Stack:', error.stack);
+    console.error('==========================================');
+
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error during money transfer',
+      error: error.message
+    });
+  }
 });
+
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
