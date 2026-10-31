@@ -296,14 +296,49 @@ class _MoneyTransferScreenState extends State<MoneyTransferScreen> {
 
         if (state is TransferSuccess) {
           _showSuccessDialog(state);
-        } else if (state is TransferFailure) {
+        }else if (state is TransferFailure) {
+          final errorMessage = state.message.toLowerCase();
+
+          String displayMessage;
+
+          if (errorMessage.contains('insufficient')) {
+            displayMessage =
+            'Insufficient wallet balance. Please enter a lower amount.';
+          } else {
+            displayMessage = state.message;
+          }
+
           ScaffoldMessenger.of(context)
             ..hideCurrentSnackBar()
             ..showSnackBar(
               SnackBar(
-                content: Text(state.message),
+                content: Row(
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        displayMessage,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 backgroundColor: Colors.red.shade700,
                 behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 4),
+                margin: const EdgeInsets.all(16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             );
         }
