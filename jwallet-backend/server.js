@@ -1,15 +1,29 @@
+
 const express = require('express');
 const cors = require('cors');
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
+// =====================================
+// GLOBAL VARIABLES
+// Declare these only once in this file
+// =====================================
 
 let walletBalance = 25450.75;
+
 const VALID_TOKEN = "mock_access_token_123";
 
 const processedTransfers = new Map();
+
+let nextTxnId = 10011;
+
+// =====================================
+// INITIAL TRANSACTIONS
+// =====================================
+
 let transactions = [
   {
     id: "TXN10001",
@@ -103,29 +117,51 @@ let transactions = [
   }
 ];
 
-// Health check
+// =====================================
+// HEALTH CHECK API
+// GET /
+// =====================================
+
 app.get('/', (req, res) => {
-  res.json({ status: "online", message: "JWallet API is operational" });
+  res.status(200).json({
+    status: "online",
+    message: "JWallet API is operational"
+  });
 });
 
-// Auth check middleware
+// =====================================
+// AUTHENTICATION MIDDLEWARE
+// =====================================
+
 function checkAuth(req, res, next) {
-  const authHeader = req.headers['authorization'];
+  const authHeader = req.headers.authorization;
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, message: "Unauthorized: Token missing" });
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized: Token missing"
+    });
   }
 
   const token = authHeader.split(' ')[1];
+
   if (token !== VALID_TOKEN) {
-    return res.status(401).json({ success: false, message: "Unauthorized: Invalid token" });
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized: Invalid token"
+    });
   }
 
   next();
 }
 
-// 1. LOGIN API: POST /api/v1/auth/login
+// =====================================
+// 1. LOGIN API
+// POST /api/v1/auth/login
+// =====================================
+
 app.post('/api/v1/auth/login', (req, res) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body || {};
 
   if (email === "demo@jstack.co" && password === "Demo@123") {
     return res.status(200).json({
@@ -141,49 +177,53 @@ app.post('/api/v1/auth/login', (req, res) => {
     });
   }
 
-  // Invalid credentials MUST return HTTP 401
   return res.status(401).json({
     success: false,
     message: "Invalid credentials. Use demo@jstack.co and Demo@123"
   });
 });
 
-// 2. WALLET BALANCE: GET /api/v1/wallet/balance
+// =====================================
+// 2. WALLET BALANCE API
+// GET /api/v1/wallet/balance
+// =====================================
+
 app.get('/api/v1/wallet/balance', checkAuth, (req, res) => {
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     data: {
       walletId: "WALLET10001",
       currency: "INR",
-      availableBalance: parseFloat(walletBalance.toFixed(2)),
+      availableBalance: Number(walletBalance.toFixed(2)),
       maskedAccountNumber: "XXXX XXXX 4589"
     }
   });
 });
 
-// 3. TRANSACTIONS LIST: GET /api/v1/transactions
+// =====================================
+// 3. TRANSACTIONS API
+// GET /api/v1/transactions
+// =====================================
+
 app.get('/api/v1/transactions', checkAuth, (req, res) => {
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     data: transactions
   });
 });
 
-// 4. MONEY TRANSFER: POST /api/v1/transactions/transfer
-let nextTxnId = 10011;
-
-
-
-let nextTxnId = 10011;
+// =====================================
+// 4. MONEY TRANSFER API
+// POST /api/v1/transactions/transfer
+// =====================================
 
 app.post('/api/v1/transactions/transfer', checkAuth, (req, res) => {
   try {
     console.log('========== TRANSFER API STARTED ==========');
+
     console.log('Request Body:', req.body);
-    console.log('Request Headers:', {
-      authorization: req.headers.authorization ? 'Present' : 'Missing',
-      idempotencyKey: req.headers['idempotency-key']
-    });
+
+    console.log('Idempotency Key:', req.headers['idempotency-key']);
 
     const {
       beneficiaryName,
@@ -195,7 +235,9 @@ app.post('/api/v1/transactions/transfer', checkAuth, (req, res) => {
     const idempotencyKey = req.get('Idempotency-Key');
     const token = req.get('Authorization');
 
-    if (!idempotencyKey) {
+    // Validate idempotency key
+
+    if (!idempotencyKey || !idempotencyKey.trim()) {
       return res.status(400).json({
         success: false,
         message: 'Idempotency-Key header is required'
@@ -203,6 +245,8 @@ app.post('/api/v1/transactions/transfer', checkAuth, (req, res) => {
     }
 
     const requestKey = `${token}:${idempotencyKey}`;
+
+    // Check duplicate transfer request
 
     if (processedTransfers.has(requestKey)) {
       console.log('Duplicate transfer request');
@@ -212,8 +256,12 @@ app.post('/api/v1/transactions/transfer', checkAuth, (req, res) => {
       return res.status(previous.statusCode).json(previous.body);
     }
 
+    // Validate transfer details
+
     const transferAmount = Number(amount);
+
     const normalizedMobile = String(mobileNumber || '').trim();
+
     const normalizedName = String(beneficiaryName || '').trim();
 
     if (
@@ -230,8 +278,13 @@ app.post('/api/v1/transactions/transfer', checkAuth, (req, res) => {
       });
     }
 
+    // Convert amount into paise to avoid decimal precision issues
+
     const amountInPaise = Math.round(transferAmount * 100);
+
     const balanceInPaise = Math.round(walletBalance * 100);
+
+    // Check wallet balance
 
     if (amountInPaise > balanceInPaise) {
       return res.status(400).json({
@@ -240,9 +293,15 @@ app.post('/api/v1/transactions/transfer', checkAuth, (req, res) => {
       });
     }
 
+    // Deduct money
+
     walletBalance = (balanceInPaise - amountInPaise) / 100;
 
+    // Generate transaction ID
+
     const transactionId = `TXN${nextTxnId++}`;
+
+    // Create transaction
 
     const newTxn = {
       id: transactionId,
@@ -258,10 +317,12 @@ app.post('/api/v1/transactions/transfer', checkAuth, (req, res) => {
 
     transactions.unshift(newTxn);
 
+    // Prepare API response
+
     const responseBody = {
       success: true,
       data: {
-        transactionId,
+        transactionId: transactionId,
         status: 'SUCCESS',
         amount: amountInPaise / 100,
         currency: 'INR',
@@ -269,20 +330,26 @@ app.post('/api/v1/transactions/transfer', checkAuth, (req, res) => {
       }
     };
 
+    // Store response for idempotency
+
     processedTransfers.set(requestKey, {
       statusCode: 200,
       body: responseBody
     });
 
     console.log('Transfer successful:', responseBody);
+
     console.log('========== TRANSFER API COMPLETED ==========');
 
     return res.status(200).json(responseBody);
 
   } catch (error) {
     console.error('========== TRANSFER API ERROR ==========');
+
     console.error('Error Message:', error.message);
+
     console.error('Error Stack:', error.stack);
+
     console.error('==========================================');
 
     return res.status(500).json({
@@ -293,8 +360,25 @@ app.post('/api/v1/transactions/transfer', checkAuth, (req, res) => {
   }
 });
 
+// =====================================
+// GLOBAL ERROR HANDLER
+// =====================================
+
+app.use((err, req, res, next) => {
+  console.error('Server Error:', err.stack);
+
+  return res.status(500).json({
+    success: false,
+    message: 'Internal server error'
+  });
+});
+
+// =====================================
+// START SERVER
+// =====================================
 
 const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`JWallet API running on port ${PORT}`);
 });
